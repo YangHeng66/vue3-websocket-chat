@@ -35,7 +35,7 @@
                 {{ msg.message }}
               </template>
               <template v-else-if="msg.type === 'image'">
-                <img :src="msg.message" class="message-image" />
+                <img :src="msg.message" class="message-image" @click="openImageViewer(msg.message)" />
               </template>
               <template v-else-if="msg.type === 'file'">
                 <a :href="msg.message" target="_blank" class="file-link">
@@ -50,7 +50,7 @@
         </div>
         <div class="input-wrapper">
           <div class="input-area">
-            <el-input v-model="newMessage" placeholder="输入消息..." @keyup.enter="sendMessage">
+            <el-input v-model="newMessage" placeholder="输入消息..." @keyup.enter="sendMessage" @paste="handlePaste">
               <template #append>
                 <el-button-group>
                   <el-button @click="sendMessage">发送</el-button>
@@ -105,6 +105,7 @@
         </el-input>
       </div>
     </div>
+    <el-image-viewer v-if="showImageViewer" :url-list="[previewImage]" @close="closeImageViewer" />
   </div>
 </template>
 
@@ -152,14 +153,19 @@ const sendMessage = () => {
     newMessage.value = '';
   }
 };
-const handleUploadSuccess = (response) => {
+
+const handleUploadSuccess = async (response) => {
   try {
+    const isImage = response.path.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+
     socket.emit('message', {
       message: `http://localhost:8888${response.path}`,
-      type: response.path.match(/\.(jpg|jpeg|png|gif)$/i) ? 'image' : 'file'
+      type: isImage ? 'image' : 'file'
     });
+
+    ElMessage.success(isImage ? '图片发送成功' : '文件发送成功');
   } catch (error) {
-    ElMessage.error('文件上传失败：' + error.message);
+    ElMessage.error('发送失败：' + error.message);
   }
 };
 
@@ -175,6 +181,7 @@ const beforeUpload = (file) => {
   }
   return true;
 };
+
 const formatTime = (timestamp) => {
   if (!timestamp) return '';
   const date = new Date(timestamp);
@@ -215,6 +222,59 @@ socket.on('userLeft', (data) => {
   });
   scrollToBottom();
 });
+
+const showImageViewer = ref(false);
+const previewImage = ref('');
+
+const openImageViewer = (imageUrl) => {
+  previewImage.value = imageUrl;
+  showImageViewer.value = true;
+};
+
+const closeImageViewer = () => {
+  showImageViewer.value = false;
+  previewImage.value = '';
+};
+
+const handlePaste = async (event) => {
+  const items = event.clipboardData.items;
+
+  for (let item of items) {
+    if (item.type.indexOf('image') !== -1) {
+      event.preventDefault();
+
+      const file = item.getAsFile();
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        ElMessage.info('正在上传图片...');
+
+        const response = await fetch(uploadUrl, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          throw new Error('上传失败');
+        }
+
+        const data = await response.json();
+
+        socket.emit('message', {
+          message: `http://localhost:8888${data.path}`,
+          type: 'image'
+        });
+
+        ElMessage.success('图片发送成功');
+      } catch (error) {
+        ElMessage.error('图片上传失败：' + error.message);
+      }
+
+      break;
+    }
+  }
+};
 </script>
 
 <style scoped>
@@ -398,10 +458,9 @@ socket.on('userLeft', (data) => {
 .message-image {
   max-width: 300px;
   max-height: 300px;
-  border-radius: 12px;
+  border-radius: 8px;
   cursor: zoom-in;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease;
 }
 
 .message-image:hover {
@@ -741,5 +800,61 @@ socket.on('userLeft', (data) => {
   .input-area {
     padding: 12px;
   }
+}
+
+/* 自定义图片预览样式 */
+:deep(.el-image-viewer__wrapper) {
+  background-color: rgba(0, 0, 0, 0.8);
+}
+
+:deep(.el-image-viewer__close) {
+  color: #fff;
+  font-size: 32px;
+}
+
+:deep(.el-image-viewer__actions) {
+  opacity: 0.9;
+  padding: 15px;
+}
+
+:deep(.el-image-viewer__canvas) {
+  user-select: none;
+}
+
+:deep(.el-image-viewer__prev, .el-image-viewer__next) {
+  width: 50px;
+  height: 50px;
+  font-size: 24px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+}
+
+:deep(.el-image-viewer__prev:hover, .el-image-viewer__next:hover) {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* 添加上传相关样式 */
+.upload-progress {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  background: white;
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* 优化图片显示样式 */
+.message-image {
+  cursor: zoom-in;
+  transition: transform 0.2s ease;
+  max-width: 300px;
+  max-height: 300px;
+  border-radius: 8px;
+}
+
+.message-image:hover {
+  transform: scale(1.02);
 }
 </style>
