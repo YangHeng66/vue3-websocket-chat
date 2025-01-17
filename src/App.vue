@@ -22,7 +22,14 @@
           </div>
         </div>
       </el-aside>
-      <el-main class="chat-main">
+      <el-main class="chat-main" @dragover.prevent @dragleave.prevent @drop.prevent="handleDrop"
+        :class="{ 'drag-over': isDragging }">
+        <div v-show="isDragging" class="drag-overlay">
+          <el-icon class="drag-icon">
+            <Upload />
+          </el-icon>
+          <p>释放鼠标上传文件</p>
+        </div>
         <div class="chat-messages" ref="messagesContainer">
           <div v-for="(msg, index) in messages" :key="index" class="message"
             :class="{ 'my-message': msg.username === username }">
@@ -275,6 +282,71 @@ const handlePaste = async (event) => {
     }
   }
 };
+
+const isDragging = ref(false);
+
+const handleDrop = async (event) => {
+  isDragging.value = false;
+  const files = event.dataTransfer.files;
+
+  if (files.length > 0) {
+    const file = files[0];
+
+    if (!beforeUpload(file)) {
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      ElMessage.info('正在上传文件...');
+
+      const response = await fetch(uploadUrl, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error('上传失败');
+      }
+
+      const data = await response.json();
+      const isImage = file.type.startsWith('image/');
+
+      socket.emit('message', {
+        message: `http://localhost:8888${data.path}`,
+        type: isImage ? 'image' : 'file'
+      });
+
+      ElMessage.success(isImage ? '图片上传成功' : '文件上传成功');
+    } catch (error) {
+      ElMessage.error('文件上传失败：' + error.message);
+    }
+  }
+};
+
+onMounted(() => {
+  const mainEl = document.querySelector('.chat-main');
+
+  mainEl.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    isDragging.value = true;
+  });
+
+  mainEl.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    const rect = mainEl.getBoundingClientRect();
+    if (
+      e.clientX < rect.left ||
+      e.clientX >= rect.right ||
+      e.clientY < rect.top ||
+      e.clientY >= rect.bottom
+    ) {
+      isDragging.value = false;
+    }
+  });
+});
 </script>
 
 <style scoped>
@@ -731,6 +803,7 @@ const handlePaste = async (event) => {
   height: 100%;
   position: relative;
   background: #f8f9fa;
+  transition: all 0.3s ease;
 }
 
 /* 消息区域样式 */
@@ -856,5 +929,48 @@ const handlePaste = async (event) => {
 
 .message-image:hover {
   transform: scale(1.02);
+}
+
+.drag-over {
+  border: 2px dashed #409EFF;
+  background-color: rgba(64, 158, 255, 0.1);
+}
+
+.drag-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.9);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  pointer-events: none;
+  animation: fadeIn 0.3s ease;
+}
+
+.drag-icon {
+  font-size: 48px;
+  color: #409EFF;
+  margin-bottom: 16px;
+}
+
+.drag-overlay p {
+  font-size: 18px;
+  color: #409EFF;
+  margin: 0;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 </style>
