@@ -12,12 +12,15 @@
         </div>
         <div class="user-list">
           <div v-for="user in users" :key="user" class="user-item">
-            <el-avatar :size="32" class="user-avatar">
+            <el-avatar :size="40" class="user-avatar" :style="{ backgroundColor: getAvatarColor(user) }">
               {{ user.charAt(0).toUpperCase() }}
             </el-avatar>
             <div class="user-info">
               <span class="user-name">{{ user }}</span>
-              <span class="user-status">在线</span>
+              <div class="user-status">
+                <span class="status-dot"></span>
+                在线
+              </div>
             </div>
           </div>
         </div>
@@ -326,6 +329,15 @@ const handleDrop = async (event) => {
   }
 };
 
+const getAvatarColor = (username) => {
+  const colors = [
+    '#3498db', '#e74c3c', '#2ecc71', '#f1c40f',
+    '#9b59b6', '#1abc9c', '#e67e22', '#34495e'
+  ];
+  const index = username.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return colors[index % colors.length];
+};
+
 onMounted(() => {
   const mainEl = document.querySelector('.chat-main');
 
@@ -477,94 +489,112 @@ onMounted(() => {
 }
 
 .chat-messages {
-  flex: 1;
   padding: 20px;
   overflow-y: auto;
-  background: #fff;
+  height: calc(100vh - 180px);
+  background: #f8fafc;
 }
 
 .message {
+  display: flex;
+  flex-direction: column;
   margin-bottom: 20px;
   max-width: 80%;
-  animation: fadeIn 0.3s ease;
+  animation: slideIn 0.3s ease;
 }
 
 .my-message {
   margin-left: auto;
+  align-items: flex-end;
 }
 
 .message-header {
-  margin-bottom: 4px;
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-bottom: 4px;
+  font-size: 13px;
 }
 
 .username {
   font-weight: 500;
-  color: #2c3e50;
-  font-size: 14px;
+  color: #64748b;
 }
 
 .time {
-  font-size: 12px;
   color: #94a3b8;
+  font-size: 12px;
 }
 
 .message-content {
   padding: 12px 16px;
-  background: #f1f5f9;
+  background: white;
   border-radius: 12px;
-  position: relative;
-  color: #334155;
-  font-size: 14px;
-  line-height: 1.5;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  position: relative;
+  border: 1px solid #e2e8f0;
+  word-break: break-word;
+  line-height: 1.5;
 }
 
 .my-message .message-content {
   background: #3b82f6;
   color: white;
+  border: none;
 }
 
-.message-image {
-  max-width: 300px;
-  max-height: 300px;
-  border-radius: 8px;
-  cursor: zoom-in;
-  transition: transform 0.2s ease;
+.my-message .username {
+  color: #3b82f6;
 }
 
-.message-image:hover {
-  transform: scale(1.02);
+.message .message-content:has(.username:contains('System')) {
+  background: #f1f5f9;
+  color: #64748b;
+  font-style: italic;
+  text-align: center;
+  border: 1px dashed #cbd5e1;
+  max-width: 400px;
+  margin: 20px auto;
+  padding: 10px 20px;
 }
 
 .file-link {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #3b82f6;
+  color: inherit;
   text-decoration: none;
-  padding: 10px 16px;
-  background: #f8fafc;
-  border-radius: 8px;
-  transition: all 0.2s ease;
-  border: 1px solid #e2e8f0;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 6px;
+  transition: all 0.3s ease;
 }
 
 .my-message .file-link {
   background: rgba(255, 255, 255, 0.1);
-  color: white;
-  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .file-link:hover {
-  background: #f1f5f9;
+  background: rgba(0, 0, 0, 0.08);
   transform: translateY(-1px);
 }
 
 .my-message .file-link:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+.message-image {
+  max-width: 300px;
+  max-height: 300px;
+  border-radius: 12px;
+  cursor: zoom-in;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.message-image:hover {
+  transform: scale(1.02);
+  box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
 }
 
 .input-area {
@@ -628,7 +658,9 @@ onMounted(() => {
 }
 
 .user-list {
-  padding: 20px;
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
 }
 
 .user-list h3 {
@@ -661,90 +693,110 @@ onMounted(() => {
 
 .user-sidebar {
   background: #2c3e50;
-  color: #fff;
   border-right: 1px solid #34495e;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .sidebar-header {
   padding: 20px;
-  border-bottom: 1px solid #34495e;
+  background: #34495e;
+  border-bottom: 1px solid #455d75;
 }
 
 .sidebar-header h3 {
+  color: #ecf0f1;
   margin: 0;
-  font-size: 16px;
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #ecf0f1;
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .user-list {
-  padding: 12px;
-  overflow-y: auto;
   flex: 1;
+  overflow-y: auto;
+  padding: 12px;
 }
 
 .user-item {
   display: flex;
   align-items: center;
   padding: 12px;
-  margin: 4px 0;
+  margin-bottom: 8px;
   border-radius: 8px;
-  cursor: pointer;
+  background: rgba(255, 255, 255, 0.05);
   transition: all 0.3s ease;
+  cursor: pointer;
 }
 
 .user-item:hover {
-  background: #34495e;
+  background: rgba(255, 255, 255, 0.1);
   transform: translateX(4px);
 }
 
 .user-avatar {
-  background: #3498db;
-  color: white;
-  font-weight: bold;
+  margin-right: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
 }
 
 .user-info {
-  margin-left: 12px;
   flex: 1;
-  display: flex;
-  flex-direction: column;
+  min-width: 0;
 }
 
 .user-name {
-  font-size: 14px;
+  display: block;
   color: #ecf0f1;
-  margin-bottom: 2px;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .user-status {
-  font-size: 12px;
-  color: #2ecc71;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  font-size: 12px;
+  color: #95a5a6;
 }
 
-.user-status::before {
-  content: '';
-  display: inline-block;
-  width: 6px;
-  height: 6px;
+.status-dot {
+  width: 8px;
+  height: 8px;
   background: #2ecc71;
   border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(46, 204, 113, 0.2);
+  animation: pulse 2s infinite;
 }
 
-/* 自定义滚动条 */
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.4);
+  }
+
+  70% {
+    box-shadow: 0 0 0 6px rgba(46, 204, 113, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(46, 204, 113, 0);
+  }
+}
+
+/* 优化滚动条 */
 .user-list::-webkit-scrollbar {
   width: 4px;
 }
 
 .user-list::-webkit-scrollbar-thumb {
-  background: #34495e;
+  background: #455d75;
   border-radius: 2px;
 }
 
@@ -752,20 +804,19 @@ onMounted(() => {
   background: transparent;
 }
 
-/* 动画效果 */
-.user-item {
-  animation: slideIn 0.3s ease;
-}
-
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateX(-10px);
+/* 响应式调整 */
+@media screen and (max-width: 768px) {
+  .user-sidebar {
+    width: 200px !important;
   }
 
-  to {
-    opacity: 1;
-    transform: translateX(0);
+  .user-item {
+    padding: 8px;
+  }
+
+  .user-avatar {
+    width: 32px;
+    height: 32px;
   }
 }
 
@@ -971,6 +1022,85 @@ onMounted(() => {
 
   to {
     opacity: 1;
+  }
+}
+
+/* 消息动画 */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 滚动条美化 */
+.chat-messages::-webkit-scrollbar {
+  width: 5px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 响应式调整 */
+@media screen and (max-width: 768px) {
+  .chat-messages {
+    padding: 15px;
+  }
+
+  .message {
+    max-width: 90%;
+  }
+
+  .message-image {
+    max-width: 250px;
+  }
+
+  .message-content {
+    padding: 10px 14px;
+  }
+}
+
+/* 深色主题适配 */
+@media (prefers-color-scheme: dark) {
+  .chat-messages {
+    background: #1e293b;
+  }
+
+  .message-content {
+    background: #334155;
+    border-color: #475569;
+    color: #e2e8f0;
+  }
+
+  .username {
+    color: #94a3b8;
+  }
+
+  .time {
+    color: #64748b;
+  }
+
+  .my-message .message-content {
+    background: #2563eb;
+  }
+
+  .file-link {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .file-link:hover {
+    background: rgba(255, 255, 255, 0.1);
   }
 }
 </style>
