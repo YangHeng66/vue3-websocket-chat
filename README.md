@@ -45,7 +45,7 @@ cd vue3-websocket-chat
 2. 安装依赖
 ```bash
 # 安装前端依赖
-cd client
+cd vue3-websocket-chat
 npm install
 
 # 安装后端依赖
@@ -60,7 +60,7 @@ cd server
 npm start
 
 # 新开终端，启动前端服务
-cd client
+cd vue3-websocket-chat
 npm run dev
 ```
 
