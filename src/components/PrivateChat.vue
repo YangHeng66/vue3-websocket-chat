@@ -55,7 +55,7 @@
 
         <div class="chat-input">
             <el-input v-model="messageText" type="textarea" rows="3" placeholder="输入消息..."
-                @keyup.enter.exact="sendMessage" />
+                @keyup.enter.exact="sendMessage" @paste="handlePaste" @drop.prevent="handleDrop" @dragover.prevent />
             <div class="input-actions">
                 <el-upload class="upload-area" :action="uploadUrl" :show-file-list="false"
                     :before-upload="handleBeforeUpload" :on-success="handleUploadSuccess" :on-error="handleUploadError"
@@ -299,6 +299,62 @@ const downloadFile = (url) => {
         ElMessage.error('文件下载失败：' + error.message);
     }
 };
+
+// 处理粘贴事件
+const handlePaste = async (event) => {
+    const items = event.clipboardData.items;
+
+    for (let item of items) {
+        if (item.type.indexOf('image') !== -1) {
+            event.preventDefault();
+
+            const file = item.getAsFile();
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                ElMessage.info('正在上传图片...');
+
+                const response = await fetch(uploadUrl, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                handleUploadSuccess(data);
+            } catch (error) {
+                handleUploadError(error);
+            }
+        }
+    }
+};
+
+// 处理拖拽上传
+const handleDrop = async (event) => {
+    const files = Array.from(event.dataTransfer.files);
+
+    for (const file of files) {
+        // 检查文件类型和大小
+        if (!handleBeforeUpload(file)) {
+            continue;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const response = await fetch(uploadUrl, {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+            handleUploadSuccess(data);
+        } catch (error) {
+            handleUploadError(error);
+        }
+    }
+};
 </script>
 
 <style scoped>
@@ -518,5 +574,20 @@ const downloadFile = (url) => {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* 添加拖拽相关样式 */
+.chat-input .el-textarea__inner {
+    transition: border-color 0.2s;
+}
+
+.chat-input .el-textarea__inner:focus {
+    border-color: #409eff;
+}
+
+/* 拖拽悬停效果 */
+.chat-input .el-textarea__inner[drag-over="true"] {
+    border-color: #409eff;
+    border-style: dashed;
 }
 </style>
