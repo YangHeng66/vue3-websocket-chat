@@ -120,7 +120,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue';
+import { ref, onMounted, nextTick, watch } from 'vue';
 import { io } from 'socket.io-client';
 import { ElMessage } from 'element-plus';
 import { Document, Upload, ChatRound, UserFilled, Position } from '@element-plus/icons-vue';
@@ -144,6 +144,7 @@ const emojis = [
 ]
 
 const insertEmoji = (emoji) => {
+
   newMessage.value += emoji
 }
 
@@ -339,23 +340,32 @@ const getAvatarColor = (username) => {
 };
 
 onMounted(() => {
-  const mainEl = document.querySelector('.chat-main');
+  // 使用 watch 监听 isLoggedIn 的变化
+  watch(isLoggedIn, (newVal) => {
+    if (newVal) {
+      // 确保登录后才执行
+      nextTick(() => {
+        const mainEl = document.querySelector('.chat-main');
+        if (mainEl) {
+          mainEl.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            isDragging.value = true;
+          });
 
-  mainEl.addEventListener('dragenter', (e) => {
-    e.preventDefault();
-    isDragging.value = true;
-  });
-
-  mainEl.addEventListener('dragleave', (e) => {
-    e.preventDefault();
-    const rect = mainEl.getBoundingClientRect();
-    if (
-      e.clientX < rect.left ||
-      e.clientX >= rect.right ||
-      e.clientY < rect.top ||
-      e.clientY >= rect.bottom
-    ) {
-      isDragging.value = false;
+          mainEl.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            const rect = mainEl.getBoundingClientRect();
+            if (
+              e.clientX < rect.left ||
+              e.clientX >= rect.right ||
+              e.clientY < rect.top ||
+              e.clientY >= rect.bottom
+            ) {
+              isDragging.value = false;
+            }
+          });
+        }
+      });
     }
   });
 });
