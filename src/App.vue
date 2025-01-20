@@ -2,28 +2,36 @@
   <div class="chat-container">
     <el-container v-if="isLoggedIn">
       <el-aside width="240px" class="user-sidebar">
-        <div class="sidebar-header">
-          <h3>
-            <el-icon>
-              <UserFilled />
-            </el-icon>
-            在线用户 ({{ users.length }})
-          </h3>
-        </div>
-        <div class="user-list">
-          <div v-for="user in users" :key="user" class="user-item">
-            <el-avatar :size="40" class="user-avatar" :style="{ backgroundColor: getAvatarColor(user) }">
-              {{ user.charAt(0).toUpperCase() }}
-            </el-avatar>
-            <div class="user-info">
-              <span class="user-name">{{ user }}</span>
-              <div class="user-status">
-                <span class="status-dot"></span>
-                在线
+        <el-tabs v-model="activeTab" class="sidebar-tabs">
+          <el-tab-pane label="在线用户" name="users">
+            <div class="sidebar-header">
+              <h3>
+                <el-icon>
+                  <UserFilled />
+                </el-icon>
+                在线用户 ({{ users.length }})
+              </h3>
+            </div>
+            <div class="user-list">
+              <div v-for="user in users" :key="user" class="user-item" @click="showUserProfile(user)"
+                v-if="user !== username">
+                <el-avatar :size="40" class="user-avatar" :style="{ backgroundColor: getAvatarColor(user) }">
+                  {{ user.charAt(0).toUpperCase() }}
+                </el-avatar>
+                <div class="user-info">
+                  <span class="user-name">{{ user }}</span>
+                  <div class="user-status">
+                    <span class="status-dot"></span>
+                    在线
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
+          </el-tab-pane>
+          <el-tab-pane label="好友" name="friends">
+            <friend-list :current-username="username" @start-private-chat="handleStartPrivateChat" />
+          </el-tab-pane>
+        </el-tabs>
       </el-aside>
       <el-main class="chat-main" @dragover.prevent @dragleave.prevent @drop.prevent="handleDrop"
         :class="{ 'drag-over': isDragging }">
@@ -116,16 +124,44 @@
       </div>
     </div>
     <el-image-viewer v-if="showImageViewer" :url-list="[previewImage]" @close="closeImageViewer" />
+    <el-drawer v-model="showPrivateChat" direction="rtl" size="80%" :with-header="false">
+      <private-chat v-if="currentPrivateUser" :current-username="username" :target-user="currentPrivateUser"
+        @close="closePrivateChat" />
+    </el-drawer>
+    <el-dialog v-model="showProfile" width="360px" :title="`用户资料`">
+      <user-profile v-if="selectedUser" :user="{
+        username: selectedUser,
+        status: '在线',
+        joinTime: new Date()
+      }" :current-username="username" @start-private-chat="handleStartPrivateChat" />
+    </el-dialog>
+    <div class="message-notifications">
+      <div v-for="notification in messageNotifications" :key="notification.id" class="notification-item"
+        @click="handleNotificationClick(notification)">
+        <el-avatar :size="32" :style="{ backgroundColor: getAvatarColor(notification.from) }">
+          {{ notification.from.charAt(0).toUpperCase() }}
+        </el-avatar>
+        <div class="notification-content">
+          <div class="notification-header">
+            <span class="notification-username">{{ notification.from }}</span>
+            <span class="notification-time">{{ formatTime(notification.timestamp) }}</span>
+          </div>
+          <div class="notification-message">{{ notification.content }}</div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, watch } from 'vue';
-import { io } from 'socket.io-client';
+import { ref, onMounted, nextTick, watch, onUnmounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Document, Upload, ChatRound, UserFilled, Position } from '@element-plus/icons-vue';
+import FriendList from './components/FriendList.vue';
+import PrivateChat from './components/PrivateChat.vue';
+import UserProfile from './components/UserProfile.vue';
+import socket from './socket';
 
-const socket = io('http://localhost:8888');
 const username = ref('');
 const isLoggedIn = ref(false);
 const users = ref([]);
@@ -133,6 +169,7 @@ const messages = ref([]);
 const newMessage = ref('');
 const messagesContainer = ref(null);
 const uploadUrl = 'http://localhost:8888/upload';
+const activeTab = ref('users');
 
 const emojis = [
   '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣',
@@ -144,14 +181,13 @@ const emojis = [
 ]
 
 const insertEmoji = (emoji) => {
-
   newMessage.value += emoji
 }
 
 const login = () => {
   if (username.value.trim()) {
     isLoggedIn.value = true;
-    socket.emit('join', username.value);
+    socket.emit('login', username.value);
   }
 };
 
@@ -339,11 +375,70 @@ const getAvatarColor = (username) => {
   return colors[index % colors.length];
 };
 
+const showPrivateChat = ref(false);
+const currentPrivateUser = ref(null);
+
+const handleStartPrivateChat = (user) => {
+  showProfile.value = false;
+  currentPrivateUser.value = {
+    username: user.username,
+    status: user.status || '在线'  // 确保有状态值
+  };
+  showPrivateChat.value = true;
+};
+
+const closePrivateChat = () => {
+  showPrivateChat.value = false;
+  currentPrivateUser.value = null;
+};
+
+const showProfile = ref(false);
+const selectedUser = ref(null);
+
+const showUserProfile = (user) => {
+  selectedUser.value = user;
+  showProfile.value = true;
+};
+
+const messageNotifications = ref([]);
+const notificationSet = ref(new Set());
+
+const handleNotificationClick = (notification) => {
+  handleStartPrivateChat({
+    username: notification.from,
+    status: '在线'
+  });
+
+  messageNotifications.value = messageNotifications.value.filter(
+    n => n.id !== notification.id
+  );
+  notificationSet.value.delete(notification.id);
+};
+
 onMounted(() => {
-  // 使用 watch 监听 isLoggedIn 的变化
+  socket.off('userList');
+  socket.off('userJoined');
+  socket.off('userLeft');
+
+  socket.on('userList', (userList) => {
+    console.log('Received user list:', userList);
+    users.value = userList;
+  });
+
+  socket.on('userJoined', ({ username: joinedUser, users: userList }) => {
+    console.log('User joined:', joinedUser);
+    users.value = userList;
+  });
+
+  socket.on('userLeft', ({ username: leftUser, users: userList }) => {
+    console.log('User left:', leftUser);
+    users.value = userList;
+  });
+
+  socket.emit('getOnlineUsers');
+
   watch(isLoggedIn, (newVal) => {
     if (newVal) {
-      // 确保登录后才执行
       nextTick(() => {
         const mainEl = document.querySelector('.chat-main');
         if (mainEl) {
@@ -368,6 +463,49 @@ onMounted(() => {
       });
     }
   });
+
+  socket.on('privateMessage', (message) => {
+    if (
+      message.from !== username.value &&
+      (!currentPrivateUser.value || message.from !== currentPrivateUser.value.username)
+    ) {
+      const messageId = `${message.from}-${message.timestamp}`;
+
+      if (!notificationSet.value.has(messageId)) {
+        notificationSet.value.add(messageId);
+
+        const notification = {
+          id: messageId,
+          from: message.from,
+          content: message.type === 'text' ? message.content :
+            message.type === 'image' ? '[图片]' :
+              message.type === 'file' ? '[文件]' : message.content,
+          timestamp: new Date(message.timestamp)
+        };
+
+        messageNotifications.value.push(notification);
+
+        const audio = new Audio('/message.mp3');
+        audio.play().catch(err => console.log('无法播放提示音:', err));
+
+        setTimeout(() => {
+          messageNotifications.value = messageNotifications.value.filter(
+            n => n.id !== messageId
+          );
+          notificationSet.value.delete(messageId);
+        }, 5000);
+      }
+    }
+  });
+});
+
+onUnmounted(() => {
+  socket.off('userList');
+  socket.off('userJoined');
+  socket.off('userLeft');
+  socket.off('privateMessage');
+  notificationSet.value.clear();
+  messageNotifications.value = [];
 });
 </script>
 
@@ -468,7 +606,6 @@ onMounted(() => {
   }
 }
 
-/* 添加响应式样式 */
 @media screen and (max-width: 480px) {
   .login-box {
     margin: 20px;
@@ -484,7 +621,6 @@ onMounted(() => {
   }
 }
 
-/* 添加悬停效果 */
 :deep(.el-button) {
   transition: transform 0.2s ease;
 }
@@ -493,7 +629,6 @@ onMounted(() => {
   transform: translateY(-2px);
 }
 
-/* 添加输入框聚焦效果 */
 :deep(.el-input__wrapper:focus-within) {
   box-shadow: 0 0 0 1px #409EFF !important;
 }
@@ -800,63 +935,31 @@ onMounted(() => {
   }
 }
 
-/* 优化滚动条 */
 .user-list::-webkit-scrollbar {
   width: 4px;
 }
 
+.user-list::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
 .user-list::-webkit-scrollbar-thumb {
-  background: #455d75;
+  background: #475569;
   border-radius: 2px;
 }
 
-.user-list::-webkit-scrollbar-track {
-  background: transparent;
+.user-list::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
 }
 
-/* 响应式调整 */
-@media screen and (max-width: 768px) {
-  .user-sidebar {
-    width: 200px !important;
-  }
-
-  .user-item {
-    padding: 8px;
-  }
-
-  .user-avatar {
-    width: 32px;
-    height: 32px;
+@media (prefers-color-scheme: dark) {
+  :deep(.el-tabs__item) {
+    &.is-active {
+      background: #1e293b;
+    }
   }
 }
 
-/* 系统消息样式 */
-.message .message-content:has(.username:contains('System')) {
-  background: #f1f5f9;
-  color: #64748b;
-  font-style: italic;
-  text-align: center;
-  border: 1px dashed #cbd5e1;
-}
-
-/* 响应式调整 */
-@media screen and (max-width: 768px) {
-  .el-container {
-    width: 100%;
-    height: 100vh;
-    border-radius: 0;
-  }
-
-  .message {
-    max-width: 90%;
-  }
-
-  .message-image {
-    max-width: 250px;
-  }
-}
-
-/* 主聊天区域布局 */
 .chat-main {
   padding: 0;
   display: flex;
@@ -867,17 +970,14 @@ onMounted(() => {
   transition: all 0.3s ease;
 }
 
-/* 消息区域样式 */
 .chat-messages {
   flex: 1;
   padding: 20px;
   overflow-y: auto;
   background: #fff;
   margin-bottom: 80px;
-  /* 为固定的输入区域留出空间 */
 }
 
-/* 输入区域固定定位 */
 .input-wrapper {
   position: absolute;
   bottom: 0;
@@ -894,7 +994,6 @@ onMounted(() => {
   border-top: 1px solid #e2e8f0;
 }
 
-/* 优化输入框样式 */
 :deep(.el-input__wrapper) {
   box-shadow: none !important;
   border: 1px solid #e2e8f0;
@@ -906,12 +1005,10 @@ onMounted(() => {
   border-color: #3b82f6;
 }
 
-/* 确保内容不会被输入框遮挡 */
 .el-main {
   overflow-y: hidden;
 }
 
-/* 优化滚动条样式 */
 .chat-messages::-webkit-scrollbar {
   width: 6px;
 }
@@ -925,7 +1022,6 @@ onMounted(() => {
   background: transparent;
 }
 
-/* 响应式调整 */
 @media screen and (max-width: 768px) {
   .chat-messages {
     margin-bottom: 70px;
@@ -936,7 +1032,6 @@ onMounted(() => {
   }
 }
 
-/* 自定义图片预览样式 */
 :deep(.el-image-viewer__wrapper) {
   background-color: rgba(0, 0, 0, 0.8);
 }
@@ -967,7 +1062,6 @@ onMounted(() => {
   background-color: rgba(255, 255, 255, 0.2);
 }
 
-/* 添加上传相关样式 */
 .upload-progress {
   position: fixed;
   top: 20px;
@@ -979,7 +1073,6 @@ onMounted(() => {
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
 }
 
-/* 优化图片显示样式 */
 .message-image {
   cursor: zoom-in;
   transition: transform 0.2s ease;
@@ -1035,7 +1128,6 @@ onMounted(() => {
   }
 }
 
-/* 消息动画 */
 @keyframes slideIn {
   from {
     opacity: 0;
@@ -1048,7 +1140,6 @@ onMounted(() => {
   }
 }
 
-/* 滚动条美化 */
 .chat-messages::-webkit-scrollbar {
   width: 5px;
 }
@@ -1062,7 +1153,6 @@ onMounted(() => {
   background: transparent;
 }
 
-/* 响应式调整 */
 @media screen and (max-width: 768px) {
   .chat-messages {
     padding: 15px;
@@ -1081,7 +1171,6 @@ onMounted(() => {
   }
 }
 
-/* 深色主题适配 */
 @media (prefers-color-scheme: dark) {
   .chat-messages {
     background: #1e293b;
@@ -1111,6 +1200,256 @@ onMounted(() => {
 
   .file-link:hover {
     background: rgba(255, 255, 255, 0.1);
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .chat-messages {
+    padding: 15px;
+  }
+
+  .message {
+    max-width: 90%;
+  }
+
+  .message-image {
+    max-width: 250px;
+  }
+
+  .message-content {
+    padding: 10px 14px;
+  }
+}
+
+.sidebar-tabs {
+  height: 100%;
+  background: #1e293b;
+}
+
+:deep(.el-tabs__header) {
+  margin: 0;
+  background: #0f172a;
+  padding: 8px 8px 0;
+  border: none;
+}
+
+:deep(.el-tabs__nav-wrap) {
+  &::after {
+    display: none;
+  }
+}
+
+:deep(.el-tabs__nav) {
+  width: 100%;
+  display: flex;
+  border: none !important;
+}
+
+:deep(.el-tabs__item) {
+  flex: 1;
+  text-align: center;
+  height: 40px;
+  line-height: 40px;
+  color: #94a3b8;
+  font-size: 14px;
+  border: none !important;
+  transition: all 0.3s ease;
+
+  &.is-active {
+    color: #60a5fa;
+    background: #1e293b;
+    border-radius: 8px 8px 0 0;
+  }
+
+  &:hover {
+    color: #60a5fa;
+  }
+}
+
+:deep(.el-tabs__active-bar) {
+  display: none;
+}
+
+.user-sidebar {
+  display: flex;
+  flex-direction: column;
+  background: #1e293b;
+  border-right: 1px solid #334155;
+  padding: 0;
+}
+
+.sidebar-header {
+  padding: 16px;
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
+}
+
+.sidebar-header h3 {
+  margin: 0;
+  color: #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+}
+
+.user-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.user-item {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  margin-bottom: 4px;
+
+  &:hover {
+    background: #334155;
+  }
+}
+
+.user-info {
+  margin-left: 12px;
+}
+
+.user-name {
+  display: block;
+  color: #e2e8f0;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.user-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  display: inline-block;
+}
+
+.user-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.user-list::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+.user-list::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 2px;
+}
+
+.user-list::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :deep(.el-tabs__item) {
+    &.is-active {
+      background: #1e293b;
+    }
+  }
+}
+
+.message-notifications {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.notification-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #fff;
+  padding: 12px;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  animation: slideIn 0.3s ease;
+  width: 300px;
+}
+
+.notification-item:hover {
+  transform: translateX(-5px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.notification-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.notification-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.notification-username {
+  font-weight: 500;
+  color: #1a1a1a;
+}
+
+.notification-time {
+  font-size: 12px;
+  color: #666;
+}
+
+.notification-message {
+  font-size: 14px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .notification-item {
+    background: #1e293b;
+  }
+
+  .notification-username {
+    color: #e2e8f0;
+  }
+
+  .notification-time,
+  .notification-message {
+    color: #94a3b8;
   }
 }
 </style>
