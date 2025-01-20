@@ -87,7 +87,7 @@ const props = defineProps({
     targetUser: Object
 });
 
-const emit = defineEmits(['close']);
+const emit = defineEmits(['close', 'onUnmounted']);
 
 const chatMessages = ref([]);
 const messageText = ref('');
@@ -120,7 +120,7 @@ const sendMessage = async () => {
         timestamp: new Date()
     };
 
-    console.log('Sending message:', message);
+    console.log('Sending private message:', message);
     socket.emit('privateMessage', message);
 
     // 直接添加到本地消息列表
@@ -165,11 +165,6 @@ onMounted(() => {
             if (!messageExists) {
                 chatMessages.value.push(message);
                 scrollToBottom();
-
-                // 如果消息是从对方发来的，播放提示音
-                if (message.from === props.targetUser.username) {
-                    playMessageSound();
-                }
             }
         }
     });
@@ -182,18 +177,14 @@ onMounted(() => {
     });
 });
 
-// 播放消息提示音
-const playMessageSound = () => {
-    const audio = new Audio('/message.mp3'); // 需要添加提示音文件
-    audio.play().catch(err => console.log('无法播放提示音:', err));
-};
-
 // 在组件卸载时移除事件监听
 onUnmounted(() => {
     console.log('PrivateChat unmounted');
     socket.off('privateMessage');
     socket.off('privateHistory');
-    socket.off('newMessageNotification');
+
+    // 重新设置 App.vue 中的消息监听器
+    emit('onUnmounted');
 });
 
 // 处理文件上传前的验证

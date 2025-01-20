@@ -125,8 +125,8 @@
     </div>
     <el-image-viewer v-if="showImageViewer" :url-list="[previewImage]" @close="closeImageViewer" />
     <el-drawer v-model="showPrivateChat" direction="rtl" size="80%" :with-header="false">
-      <private-chat v-if="currentPrivateUser" :current-username="username" :target-user="currentPrivateUser"
-        @close="closePrivateChat" />
+      <PrivateChat v-if="showPrivateChat" :current-username="username" :target-user="currentPrivateUser"
+        @close="closePrivateChat" @onUnmounted="setupPrivateMessageListener" />
     </el-drawer>
     <el-dialog v-model="showProfile" width="360px" :title="`用户资料`">
       <user-profile v-if="selectedUser" :user="{
@@ -135,7 +135,7 @@
         joinTime: new Date()
       }" :current-username="username" @start-private-chat="handleStartPrivateChat" />
     </el-dialog>
-    <div class="message-notifications">
+    <div class="notifications-container">
       <div v-for="notification in messageNotifications" :key="notification.id" class="notification-item"
         @click="handleNotificationClick(notification)">
         <el-avatar :size="32" :style="{ backgroundColor: getAvatarColor(notification.from) }">
@@ -390,6 +390,7 @@ const handleStartPrivateChat = (user) => {
 const closePrivateChat = () => {
   showPrivateChat.value = false;
   currentPrivateUser.value = null;
+  setupPrivateMessageListener();
 };
 
 const showProfile = ref(false);
@@ -401,18 +402,55 @@ const showUserProfile = (user) => {
 };
 
 const messageNotifications = ref([]);
-const notificationSet = ref(new Set());
+
+const setupPrivateMessageListener = () => {
+  socket.off('privateMessage');
+
+  socket.on('privateMessage', (message) => {
+    console.log('Received private message in App.vue:', message);
+
+    if (message.to === username.value && message.from !== username.value) {
+      if (!showPrivateChat.value || currentPrivateUser.value?.username !== message.from) {
+        const messageId = Date.now() + Math.random();
+
+        const notification = {
+          id: messageId,
+          from: message.from,
+          to: message.to,
+          content: message.type === 'text' ? message.content :
+            message.type === 'image' ? '[图片]' :
+              message.type === 'file' ? '[文件]' : message.content,
+          timestamp: new Date()
+        };
+
+        messageNotifications.value.push(notification);
+        console.log('Added notification:', notification);
+
+        const audio = new Audio('/message.mp3');
+        audio.play().catch(err => console.log('无法播放提示音:', err));
+
+        setTimeout(() => {
+          messageNotifications.value = messageNotifications.value.filter(
+            n => n.id !== messageId
+          );
+        }, 5000);
+      }
+    }
+  });
+};
 
 const handleNotificationClick = (notification) => {
-  handleStartPrivateChat({
-    username: notification.from,
-    status: '在线'
-  });
-
   messageNotifications.value = messageNotifications.value.filter(
     n => n.id !== notification.id
   );
-  notificationSet.value.delete(notification.id);
+
+  showPrivateChat.value = true;
+  currentPrivateUser.value = {
+    username: notification.from,
+    status: '在线'  // 由于是收到消息，说明对方一定在线
+  };
+
+  setupPrivateMessageListener();
 };
 
 onMounted(() => {
@@ -436,6 +474,8 @@ onMounted(() => {
   });
 
   socket.emit('getOnlineUsers');
+
+  setupPrivateMessageListener();
 
   watch(isLoggedIn, (newVal) => {
     if (newVal) {
@@ -463,40 +503,6 @@ onMounted(() => {
       });
     }
   });
-
-  socket.on('privateMessage', (message) => {
-    if (
-      message.from !== username.value &&
-      (!currentPrivateUser.value || message.from !== currentPrivateUser.value.username)
-    ) {
-      const messageId = `${message.from}-${message.timestamp}`;
-
-      if (!notificationSet.value.has(messageId)) {
-        notificationSet.value.add(messageId);
-
-        const notification = {
-          id: messageId,
-          from: message.from,
-          content: message.type === 'text' ? message.content :
-            message.type === 'image' ? '[图片]' :
-              message.type === 'file' ? '[文件]' : message.content,
-          timestamp: new Date(message.timestamp)
-        };
-
-        messageNotifications.value.push(notification);
-
-        const audio = new Audio('/message.mp3');
-        audio.play().catch(err => console.log('无法播放提示音:', err));
-
-        setTimeout(() => {
-          messageNotifications.value = messageNotifications.value.filter(
-            n => n.id !== messageId
-          );
-          notificationSet.value.delete(messageId);
-        }, 5000);
-      }
-    }
-  });
 });
 
 onUnmounted(() => {
@@ -504,7 +510,6 @@ onUnmounted(() => {
   socket.off('userJoined');
   socket.off('userLeft');
   socket.off('privateMessage');
-  notificationSet.value.clear();
   messageNotifications.value = [];
 });
 </script>
@@ -1365,7 +1370,7 @@ onUnmounted(() => {
   }
 }
 
-.message-notifications {
+.notifications-container {
   position: fixed;
   bottom: 20px;
   right: 20px;

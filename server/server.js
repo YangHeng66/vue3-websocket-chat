@@ -257,7 +257,7 @@ io.on('connection', (socket) => {
         socket.emit('friendList', friendList);
     });
 
-    // 处理私聊消息
+    // 修改 privateMessage 事件处理
     socket.on('privateMessage', (message) => {
         console.log('Received private message:', message);
         const { from, to, content, type } = message;
@@ -281,8 +281,8 @@ io.on('connection', (socket) => {
             s.emit('privateMessage', newMessage);
         });
 
-        // 不再向发送者发送消息回执
-        // socket.emit('privateMessage', newMessage);
+        // 发送给发送者（为了保持消息同步）
+        socket.emit('privateMessage', newMessage);
     });
 
     // 获取私聊历史
@@ -357,6 +357,17 @@ io.on('connection', (socket) => {
     // 获取在线用户列表
     socket.on('getOnlineUsers', () => {
         socket.emit('userList', Array.from(onlineUsers));
+    });
+
+    // 在 socket.io 连接处理中添加新消息通知的处理
+    socket.on('newMessageNotification', (notification) => {
+        // 查找接收者的所有socket连接
+        const targetSockets = userSocketMap.get(notification.to) || [];
+
+        // 发送通知给接收者的所有连接
+        targetSockets.forEach(s => {
+            s.emit('newMessageNotification', notification);
+        });
     });
 });
 
